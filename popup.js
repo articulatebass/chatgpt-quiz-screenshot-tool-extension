@@ -100,19 +100,46 @@ async function initOpenAIKey() {
   }
 
   const passphrase = window.prompt(
-    "Choose a decryption password (you must remember this to use the key later):"
+    "Choose a decryption password (optional).\n" +
+      "Leave blank to store the key without an extra password.\n" +
+      "Click Cancel to abort."
   );
-  if (!passphrase) {
-    statusEl.textContent = "Initialization cancelled (no password).";
+
+  // User hit Cancel on the passphrase prompt => do nothing
+  if (passphrase === null) {
+    statusEl.textContent = "Initialization cancelled.";
     return;
   }
 
   try {
-    const encrypted = await encryptApiKey(apiKey.trim(), passphrase);
-    await new Promise((resolve) => {
-      chrome.storage.local.set({ openaiKeyEnc: encrypted }, resolve);
-    });
-    statusEl.textContent = "API key saved (encrypted). Remember your password.";
+    if (passphrase === "") {
+      // No decrypt password: store key in plain form in local storage
+      await new Promise((resolve) => {
+        chrome.storage.local.set(
+          {
+            openaiApiKeyPlain: apiKey.trim(),
+            openaiKeyEnc: null // clear any previous encrypted key
+          },
+          resolve
+        );
+      });
+      statusEl.textContent =
+        "API key saved without extra password (stored only in this browser).";
+    } else {
+      // With decrypt password: store encrypted key as before
+      const encrypted = await encryptApiKey(apiKey.trim(), passphrase);
+      await new Promise((resolve) => {
+        chrome.storage.local.set(
+          {
+            openaiKeyEnc: encrypted,
+            openaiApiKeyPlain: null // clear any previous plain key
+          },
+          resolve
+        );
+      });
+      statusEl.textContent =
+        "API key saved (encrypted). Remember your password.";
+    }
   } catch (err) {
     console.error("Error encrypting/saving key:", err);
     statusEl.textContent = "Error saving key: " + err.message;

@@ -26,7 +26,7 @@ let chatButton = null;
 let cancelButton = null;
 let loadingBar = null;
 let resultPanel = null;
-let openAIApiKey = null; // decrypted key kept only in memory for this page
+let openAIApiKey = null; // decrypted / plain key kept only in memory for this page
 
 // ===== Shortcut-related globals =====
 let enableSelectShortcut = false;
@@ -434,15 +434,25 @@ async function decryptApiKey(encObj, passphrase) {
 }
 
 async function getApiKeyForSession() {
+  // already cached in this page?
   if (openAIApiKey) {
     return openAIApiKey;
   }
 
   const storageData = await new Promise((resolve) => {
-    chrome.storage.local.get(["openaiKeyEnc"], resolve);
+    chrome.storage.local.get(["openaiKeyEnc", "openaiApiKeyPlain"], resolve);
   });
 
   const encObj = storageData.openaiKeyEnc;
+  const plainKey = storageData.openaiApiKeyPlain;
+
+  // If user chose "no decrypt password" we stored the key in plain form.
+  if (plainKey) {
+    openAIApiKey = plainKey;
+    return openAIApiKey;
+  }
+
+  // Otherwise we expect an encrypted key.
   if (!encObj) {
     alert(
       "No OpenAI API key is initialized.\n\nOpen the extension popup and click 'Initialize OpenAI API key' first."
@@ -454,6 +464,7 @@ async function getApiKeyForSession() {
     "Enter your decryption password for the OpenAI API key:"
   );
   if (!passphrase) {
+    // user cancelled / left blank => abort this request
     return null;
   }
 
