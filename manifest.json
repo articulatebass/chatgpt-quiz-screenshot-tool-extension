@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Rectangle Screenshot Picker",
+  "version": "1.2",
+  "description": "Click twice to capture a rectangular screenshot of the current page.",
+  "permissions": ["activeTab", "tabs", "storage"],
+  "host_permissions": ["https://api.openai.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Rectangle Screenshot Picker",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
