@@ -581,11 +581,11 @@ function showLoadingBar(message) {
     transform: "translateX(-50%)",
     padding: "4px 8px",
     background: "transparent",
-    color: "rgba(0,0,0,0.25)",
+    color: "rgba(0,0,0,0.1)",
     fontSize: "14px",
     fontFamily: "system-ui, sans-serif",
     zIndex: "2147483647",
-    textShadow: "0 0 4px rgba(255,255,255,0.6)"
+    textShadow: "0 0 4px rgba(255,255,255,0.05)"
   });
 
   document.body.appendChild(loadingBar);
