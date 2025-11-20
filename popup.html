@@ -35,6 +35,13 @@
       font-size: 12px;
       color: #555;
     }
+    #modelSelect {
+      width: 100%;
+      margin-top: 4px;
+      margin-bottom: 8px;
+      padding: 4px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -47,6 +54,14 @@
     <input id="enableSelectShortcutToggle" type="checkbox">
     Enable "s" selection shortcut
   </label>
+
+  <label for="modelSelect">Model</label>
+  <select id="modelSelect">
+    <option value="o1">o1 (default)</option>
+    <option value="o3">o3</option>
+    <option value="gpt-5.1">gpt-5.1</option>
+    <option value="gpt-5-pro">gpt-5-pro</option>
+  </select>
 
   <button id="startBtn">Start selection</button>
 

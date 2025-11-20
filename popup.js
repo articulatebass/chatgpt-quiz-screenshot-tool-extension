@@ -13,17 +13,22 @@ function loadSettings() {
   chrome.storage.local.get(
     {
       showRectangle: true,
-      enableSelectShortcut: false
+      enableSelectShortcut: false,
+      selectedModel: "o1"
     },
     (data) => {
       const showRectToggle = document.getElementById("showRectangleToggle");
       const selectShortcutToggle = document.getElementById("enableSelectShortcutToggle");
+      const modelSelect = document.getElementById("modelSelect");
 
       if (showRectToggle) {
         showRectToggle.checked = !!data.showRectangle;
       }
       if (selectShortcutToggle) {
         selectShortcutToggle.checked = !!data.enableSelectShortcut;
+      }
+      if (modelSelect) {
+        modelSelect.value = data.selectedModel || "o1";
       }
     }
   );
@@ -33,6 +38,7 @@ function loadSettings() {
 
 const showRectEl = document.getElementById("showRectangleToggle");
 const selectShortcutEl = document.getElementById("enableSelectShortcutToggle");
+const modelSelectEl = document.getElementById("modelSelect");
 const startBtn = document.getElementById("startBtn");
 const initKeyBtn = document.getElementById("initKeyBtn");
 
@@ -41,10 +47,12 @@ loadSettings();
 startBtn.addEventListener("click", () => {
   const showRectangle = showRectEl.checked;
   const enableSelectShortcut = selectShortcutEl.checked;
+  const selectedModel = (modelSelectEl && modelSelectEl.value) || "o1";
 
   chrome.storage.local.set({
     showRectangle,
-    enableSelectShortcut
+    enableSelectShortcut,
+    selectedModel
   });
 
   withActiveTab((tabId) => {
@@ -83,6 +91,21 @@ selectShortcutEl.addEventListener("change", () => {
     });
   });
 });
+
+if (modelSelectEl) {
+  modelSelectEl.addEventListener("change", () => {
+    const model = modelSelectEl.value || "o1";
+
+    chrome.storage.local.set({ selectedModel: model });
+
+    withActiveTab((tabId) => {
+      chrome.tabs.sendMessage(tabId, {
+        type: "UPDATE_MODEL_SELECTION",
+        model
+      });
+    });
+  });
+}
 
 initKeyBtn.addEventListener("click", () => {
   initOpenAIKey();

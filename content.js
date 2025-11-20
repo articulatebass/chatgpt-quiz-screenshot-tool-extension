@@ -14,6 +14,9 @@ let lastShowRectangleSetting = true;
 // Temporary inversion while "m" is pressed
 let invertRectKeyActive = false;
 
+// Current model (from popup), default o1
+let currentModel = "o1";
+
 // Needed so we can remove it
 function handleContextMenu(e) {
   e.preventDefault();
@@ -90,15 +93,21 @@ function onGlobalKeyDown(e) {
 ensureGlobalKeyListener();
 
 // Load initial settings from storage
-chrome.storage.local.get(["showRectangle", "enableSelectShortcut"], (data) => {
-  if (typeof data.showRectangle === "boolean") {
-    configShowRectangle = data.showRectangle;
-    lastShowRectangleSetting = data.showRectangle;
+chrome.storage.local.get(
+  ["showRectangle", "enableSelectShortcut", "selectedModel"],
+  (data) => {
+    if (typeof data.showRectangle === "boolean") {
+      configShowRectangle = data.showRectangle;
+      lastShowRectangleSetting = data.showRectangle;
+    }
+    if (typeof data.enableSelectShortcut === "boolean") {
+      enableSelectShortcut = data.enableSelectShortcut;
+    }
+    if (typeof data.selectedModel === "string" && data.selectedModel.trim()) {
+      currentModel = data.selectedModel.trim();
+    }
   }
-  if (typeof data.enableSelectShortcut === "boolean") {
-    enableSelectShortcut = data.enableSelectShortcut;
-  }
-});
+);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "START_SELECTION") {
@@ -118,6 +127,10 @@ chrome.runtime.onMessage.addListener((message) => {
     if (typeof message.showRectangle === "boolean") {
       configShowRectangle = message.showRectangle;
       lastShowRectangleSetting = message.showRectangle;
+    }
+  } else if (message.type === "UPDATE_MODEL_SELECTION") {
+    if (typeof message.model === "string" && message.model.trim()) {
+      currentModel = message.model.trim();
     }
   }
 });
@@ -547,31 +560,29 @@ async function onChatButtonClick() {
 
   try {
     const body = {
-    model: "o1",                             // ⬅️ main change
-    reasoning: { effort: "high" },          // or "medium" / "low"
-    text: { verbosity: "medium" },
-    input: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text:
-              "You are helping me understand this screenshot.\n" +
-              "1) Briefly explain what is shown.\n" +
-              "2) If there is a question or problem, answer or solve it clearly.\n"
-          },
-          {
-            type: "input_image",
-            image_url: imageDataForThisRequest,
-            detail: "high"
-          }
-        ]
-      }
-    ]
-  };
-
-
+      model: currentModel || "o1",
+      reasoning: { effort: "high" },          // or "medium" / "low"
+      text: { verbosity: "medium" },
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "You are helping me understand this screenshot.\n" +
+                "1) Briefly explain what is shown.\n" +
+                "2) If there is a question or problem, answer or solve it clearly.\n"
+            },
+            {
+              type: "input_image",
+              image_url: imageDataForThisRequest,
+              detail: "high"
+            }
+          ]
+        }
+      ]
+    };
 
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
