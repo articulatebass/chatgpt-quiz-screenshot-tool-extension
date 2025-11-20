@@ -704,7 +704,8 @@ function ensureResultPanel() {
     color: "#666",
     cursor: "pointer",
     fontSize: "16px",
-    lineHeight: "16px"
+    lineHeight: "16px",
+    opacity: "0.25"
   });
   closeBtn.addEventListener("click", () => {
     closeResultPanel();
@@ -728,7 +729,7 @@ function ensureResultPanel() {
     cursor: "pointer",
     padding: "0 4px",
     fontSize: "12px",
-    opacity: "0.25"
+    opacity: "0.1"
   });
   prevBtn.addEventListener("click", () => {
     if (!responses.length) return;
@@ -745,7 +746,7 @@ function ensureResultPanel() {
     cursor: "pointer",
     padding: "0 4px",
     fontSize: "12px",
-    opacity: "0.25"
+    opacity: "0.1"
   });
   nextBtn.addEventListener("click", () => {
     if (!responses.length) return;
