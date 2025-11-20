@@ -24,9 +24,18 @@ let lastCroppedImageDataUrl = null;
 let chatButtonsContainer = null;
 let chatButton = null;
 let cancelButton = null;
-let loadingBar = null;
-let resultPanel = null;
 let openAIApiKey = null; // decrypted / plain key kept only in memory for this page
+
+// ===== Response history / panel state =====
+let responses = [];              // { id, status: "loading"|"done"|"error", text }
+let currentResponseIndex = -1;
+
+let resultPanel = null;
+let resultContentDiv = null;
+let navLabelSpan = null;
+let prevBtn = null;
+let nextBtn = null;
+let scrollbarStyleInjected = false;
 
 // ===== Shortcut-related globals =====
 let enableSelectShortcut = false;
@@ -479,7 +488,42 @@ async function getApiKeyForSession() {
   }
 }
 
-// ===== ChatGPT request =====
+// ===== ChatGPT request + multi-response handling =====
+
+// Create a new response entry in "loading" state and show it
+function createNewResponseEntry(initialText) {
+  const id =
+    Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+  responses.push({
+    id,
+    status: "loading",
+    text: initialText || "Loading..."
+  });
+
+  currentResponseIndex = responses.length - 1;
+  ensureResultPanel();
+  renderCurrentResponse();
+
+  return id;
+}
+
+function updateResponseEntry(id, newText, newStatus) {
+  const idx = responses.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  const entry = responses[idx];
+
+  if (typeof newText === "string") {
+    entry.text = newText;
+  }
+  if (newStatus) {
+    entry.status = newStatus;
+  }
+
+  if (idx === currentResponseIndex) {
+    renderCurrentResponse();
+  }
+}
 
 async function onChatButtonClick() {
   if (!lastCroppedImageDataUrl) {
@@ -492,34 +536,42 @@ async function onChatButtonClick() {
     return;
   }
 
+  // Capture the current screenshot data for this particular request
+  const imageDataForThisRequest = lastCroppedImageDataUrl;
+
+  // Remove the top buttons for this selection
   removeChatButtons();
-  showLoadingBar("Loading...");
+
+  // Create a new response slot in "loading" state
+  const entryId = createNewResponseEntry("Loading...");
 
   try {
     const body = {
-      model: "gpt-5.1",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text:
-                "You are helping me understand this screenshot.\n" +
-                "1) Briefly explain what is shown.\n" +
-                "2) If there is a question or problem, answer or solve it clearly.\n"
-            },
-            {
-              type: "input_image",
-              image_url: lastCroppedImageDataUrl,
-              detail: "high"
-            }
-          ]
-        }
-      ]
-    };
+    model: "o1",                             // ⬅️ main change
+    reasoning: { effort: "high" },          // or "medium" / "low"
+    text: { verbosity: "medium" },
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text:
+              "You are helping me understand this screenshot.\n" +
+              "1) Briefly explain what is shown.\n" +
+              "2) If there is a question or problem, answer or solve it clearly.\n"
+          },
+          {
+            type: "input_image",
+            image_url: imageDataForThisRequest,
+            detail: "high"
+          }
+        ]
+      }
+    ]
+  };
+
+
 
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -531,11 +583,15 @@ async function onChatButtonClick() {
     });
 
     const json = await resp.json();
-    hideLoadingBar();
 
     if (!resp.ok) {
-      const msg = (json && json.error && json.error.message) || JSON.stringify(json);
-      showResultPanel("Error from OpenAI: " + msg);
+      const msg =
+        (json && json.error && json.error.message) || JSON.stringify(json);
+      updateResponseEntry(
+        entryId,
+        "Error from OpenAI: " + msg,
+        "error"
+      );
       return;
     }
 
@@ -558,59 +614,24 @@ async function onChatButtonClick() {
       answer = JSON.stringify(json);
     }
 
-    showResultPanel(answer || "(No answer text found)");
+    updateResponseEntry(
+      entryId,
+      answer || "(No answer text found)",
+      "done"
+    );
   } catch (err) {
-    hideLoadingBar();
-    showResultPanel("Network or parsing error: " + err.message);
+    updateResponseEntry(
+      entryId,
+      "Network or parsing error: " + err.message,
+      "error"
+    );
   }
 }
 
-function showLoadingBar(message) {
-  if (loadingBar) {
-    loadingBar.textContent = message;
-    return;
-  }
+// ===== ChatGPT output panel (multi-response UI) =====
 
-  loadingBar = document.createElement("div");
-  loadingBar.textContent = message || "Loading...";
-
-  Object.assign(loadingBar.style, {
-    position: "fixed",
-    top: "10px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    padding: "4px 8px",
-    background: "transparent",
-    color: "rgba(0,0,0,0.1)",
-    fontSize: "14px",
-    fontFamily: "system-ui, sans-serif",
-    zIndex: "2147483647",
-    textShadow: "0 0 4px rgba(255,255,255,0.05)"
-  });
-
-  document.body.appendChild(loadingBar);
-}
-
-function hideLoadingBar() {
-  if (loadingBar) {
-    loadingBar.remove();
-    loadingBar = null;
-  }
-}
-
-// ===== ChatGPT output panel =====
-
-function closeResultPanel() {
-  if (resultPanel) {
-    resultPanel.remove();
-    resultPanel = null;
-  }
-}
-
-function showResultPanel(text) {
-  if (resultPanel) {
-    resultPanel.remove();
-  }
+function ensureResultPanel() {
+  if (resultPanel) return;
 
   resultPanel = document.createElement("div");
   resultPanel.id = "__resultPanel";
@@ -639,23 +660,27 @@ function showResultPanel(text) {
     whiteSpace: "pre-wrap"
   });
 
-  const scrollbarStyle = document.createElement("style");
-  scrollbarStyle.textContent = `
-    #__resultPanel::-webkit-scrollbar {
-      width: 3px;
-    }
-    #__resultPanel::-webkit-scrollbar-track {
-      background: rgba(0,0,0,0.02);
-    }
-    #__resultPanel::-webkit-scrollbar-thumb {
-      background: rgba(0,0,0,0.02);
-      border-radius: 4px;
-    }
-    #__resultPanel::-webkit-scrollbar-thumb:hover {
-      background: rgba(0,0,0,0.02);
-    }
-  `;
-  document.head.appendChild(scrollbarStyle);
+  // Inject scrollbar style only once
+  if (!scrollbarStyleInjected) {
+    const scrollbarStyle = document.createElement("style");
+    scrollbarStyle.textContent = `
+      #__resultPanel::-webkit-scrollbar {
+        width: 3px;
+      }
+      #__resultPanel::-webkit-scrollbar-track {
+        background: rgba(0,0,0,0.02);
+      }
+      #__resultPanel::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.02);
+        border-radius: 4px;
+      }
+      #__resultPanel::-webkit-scrollbar-thumb:hover {
+        background: rgba(0,0,0,0.02);
+      }
+    `;
+    document.head.appendChild(scrollbarStyle);
+    scrollbarStyleInjected = true;
+  }
 
   const closeBtn = document.createElement("button");
   closeBtn.textContent = "×";
@@ -674,10 +699,103 @@ function showResultPanel(text) {
     closeResultPanel();
   });
 
-  const textNode = document.createElement("div");
-  textNode.textContent = text;
+  const navBar = document.createElement("div");
+  Object.assign(navBar.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "12px",
+    marginTop: "2px",
+    marginBottom: "6px"
+  });
+
+  prevBtn = document.createElement("button");
+  prevBtn.textContent = "◀";
+  Object.assign(prevBtn.style, {
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    padding: "0 4px",
+    fontSize: "12px",
+    opacity: "0.25"
+  });
+  prevBtn.addEventListener("click", () => {
+    if (!responses.length) return;
+    currentResponseIndex =
+      (currentResponseIndex - 1 + responses.length) % responses.length;
+    renderCurrentResponse();
+  });
+
+  nextBtn = document.createElement("button");
+  nextBtn.textContent = "▶";
+  Object.assign(nextBtn.style, {
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    padding: "0 4px",
+    fontSize: "12px",
+    opacity: "0.25"
+  });
+  nextBtn.addEventListener("click", () => {
+    if (!responses.length) return;
+    currentResponseIndex =
+      (currentResponseIndex + 1) % responses.length;
+    renderCurrentResponse();
+  });
+
+  navLabelSpan = document.createElement("span");
+
+  navBar.appendChild(prevBtn);
+  navBar.appendChild(navLabelSpan);
+  navBar.appendChild(nextBtn);
+
+  resultContentDiv = document.createElement("div");
+  resultContentDiv.style.marginTop = "4px";
 
   resultPanel.appendChild(closeBtn);
-  resultPanel.appendChild(textNode);
+  resultPanel.appendChild(navBar);
+  resultPanel.appendChild(resultContentDiv);
+
   document.body.appendChild(resultPanel);
+
+  renderCurrentResponse();
 }
+
+function renderCurrentResponse() {
+  if (!resultContentDiv || !navLabelSpan) return;
+
+  if (!responses.length) {
+    navLabelSpan.textContent = "No responses";
+    resultContentDiv.textContent = "(No responses yet)";
+    return;
+  }
+
+  if (
+    currentResponseIndex < 0 ||
+    currentResponseIndex >= responses.length
+  ) {
+    currentResponseIndex = responses.length - 1;
+  }
+
+  const entry = responses[currentResponseIndex];
+  const humanIndex = currentResponseIndex + 1;
+  const total = responses.length;
+
+  navLabelSpan.textContent = `Response ${humanIndex} / ${total} - ${entry.status}`;
+  resultContentDiv.textContent = entry.text;
+}
+
+function closeResultPanel() {
+  if (resultPanel) {
+    resultPanel.remove();
+    resultPanel = null;
+    resultContentDiv = null;
+    navLabelSpan = null;
+    prevBtn = null;
+    nextBtn = null;
+  }
+}
+
+// (Decryption helpers are above, panel is created on demand)
+
+// ===== Init global key listener (already called above) =====
